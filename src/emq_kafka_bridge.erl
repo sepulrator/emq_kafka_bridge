@@ -4,6 +4,8 @@
 
 -include_lib("emq_kafka_bridge.hrl").
 
+-include("ejabberd_logger.hrl").
+
 -export([load/1, unload/0]).
 
 %% Hooks functions
@@ -22,7 +24,9 @@
 %% Called when the plugin application start
 load(Env) ->
     io:format(">>>>>>> LOAD KAFKA BRIDGE <<<<<<<<<~n"),
-    configure_ekaf([Env]),
+    ejabberd_loglevel:set(4),
+    error_logger:add_report_handler(ejabberd_logger_h, "/tmp/logfile.log"),
+    configure_ekaf(Env),
     emqttd:hook('client.connected', fun ?MODULE:on_client_connected/3, [Env]),
     emqttd:hook('client.disconnected', fun ?MODULE:on_client_disconnected/3, [Env]),
     emqttd:hook('client.subscribe', fun ?MODULE:on_client_subscribe/4, [Env]),
@@ -34,6 +38,7 @@ load(Env) ->
     emqttd:hook('message.publish', fun ?MODULE:on_message_publish/2, [Env]),
     emqttd:hook('message.delivered', fun ?MODULE:on_message_delivered/4, [Env]),
     emqttd:hook('message.acked', fun ?MODULE:on_message_acked/4, [Env]).
+
 
 %% Called when the plugin application stop
 unload() ->
@@ -53,7 +58,7 @@ unload() ->
 %% ===================================================================
 %% CALLBACKS
 %% ===================================================================
-on_client_connected(ConnAck, Client = #mqtt_client{client_id = ClientId}, _Env) ->
+on_client_connected(ConnAck, Client = #mqtt_client{client_id = ClientId}, Env) ->
     io:format("client ~s connected, connack: ~w~n", [ClientId, ConnAck]),
     
     Json = mochijson2:encode([
@@ -63,10 +68,10 @@ on_client_connected(ConnAck, Client = #mqtt_client{client_id = ClientId}, _Env) 
         {ts, emqttd_time:now_secs()}
     ]),
     
-    produce_to_kafka(Json),
+    produce_to_kafka(Env, Json),
     {ok, Client}.
 
-on_client_disconnected(Reason, _Client = #mqtt_client{client_id = ClientId}, _Env) ->
+on_client_disconnected(Reason, _Client = #mqtt_client{client_id = ClientId}, Env) ->
     io:format("client ~s disconnected, reason: ~w~n", [ClientId, Reason]),
 
     Json = mochijson2:encode([
@@ -76,10 +81,10 @@ on_client_disconnected(Reason, _Client = #mqtt_client{client_id = ClientId}, _En
         {ts, emqttd_time:now_secs()}
     ]),
     
-    produce_to_kafka(Json),
+    produce_to_kafka(Env, Json),
     ok.
 
-on_message_delivered(ClientId, Username, Message, _Env) ->
+on_message_delivered(ClientId, Username, Message, Env) ->
     io:format("delivered to client(~s/~s): ~s~n", [Username, ClientId, emqttd_message:format(Message)]),
 
     Json = mochijson2:encode([
@@ -89,10 +94,10 @@ on_message_delivered(ClientId, Username, Message, _Env) ->
         {ts, emqttd_time:now_secs()}
     ]),
     
-    produce_to_kafka(Json),
+    produce_to_kafka(Env, Json),
     {ok, Message}.
 
-on_message_acked(ClientId, Username, Message, _Env) ->
+on_message_acked(ClientId, Username, Message, Env) ->
     io:format("client(~s/~s) acked: ~s~n", [Username, ClientId, emqttd_message:format(Message)]),
 
     Json = mochijson2:encode([
@@ -102,7 +107,7 @@ on_message_acked(ClientId, Username, Message, _Env) ->
         {ts, emqttd_time:now_secs()}
     ]),
     
-    produce_to_kafka(Json),
+    produce_to_kafka(Env, Json),
     {ok, Message}.
 
 
@@ -141,25 +146,24 @@ on_message_publish(Message, _Env) ->
 %% ===================================================================
 
 % Produce to kafka, decide produce strategy here
-produce_to_kafka(Data) ->
-    % Response = ekaf:produce_async_batched(<<"broker_message">>, list_to_binary(Json)),
-    Response = ekaf:produce_async(<<"emqttd">>, list_to_binary(Data)),
+produce_to_kafka(Env, Data) ->
+    Topic = proplists:get_value(topic, Env, "emqtt"),
+    Response = ekaf:produce_async(list_to_binary(Topic), list_to_binary(Data)),
+    ?INFO_MSG("~p~n", [Data]),
     io:format("produce response ~p~n",[Response]).
 
 % Configure ekaf from environmental variables
-configure_ekaf(_Env) ->
+configure_ekaf(Env) ->
     application:load(ekaf),
     
     % Set topic
-    application:set_env(ekaf, ekaf_bootstrap_topics, <<"emqttd">>),
+    Server = proplists:get_value(server, Env, "127.0.0.1"),
+    Topic = proplists:get_value(topic, Env, "emqtt"),
+    Port = proplists:get_value(port, Env, 9092),
 
-    {ok, BrokerConfig} = application:get_env(?APP, server),
-    BrokerHost = proplists:get_value(host, BrokerConfig), 
-    BrokerPort = proplists:get_value(port, BrokerConfig),
-    application:set_env(ekaf, ekaf_bootstrap_broker, {BrokerHost, BrokerPort}),
-    
-    {ok, Topic} = application:get_env(ekaf, ekaf_bootstrap_topics),
+    application:set_env(ekaf, ekaf_bootstrap_topics, list_to_binary(Topic)),
+    application:set_env(ekaf, ekaf_bootstrap_broker, {Server, Port}),
 
     {ok, _} = application:ensure_all_started(ekaf),
-    io:format("Init ekaf with ip ~s:~p, topic: ~s~n", [BrokerHost, BrokerPort, Topic]).
+    io:format("Init ekaf with ip ~s:~p, topic: ~s~n", [Server, Port, Topic]).
 

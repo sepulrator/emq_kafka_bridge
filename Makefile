@@ -1,6 +1,6 @@
 PROJECT = emq_kafka_bridge
 PROJECT_DESCRIPTION = Kafka bridge
-PROJECT_VERSION = 1.0
+PROJECT_VERSION = 2.0
 
 DEPS = ekaf clique
 dep_ekaf = git https://github.com/helpshift/ekaf master

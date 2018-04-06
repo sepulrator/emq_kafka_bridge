@@ -11,3 +11,4 @@ rel/example_project
 .erlang.mk/
 data/
 emq_plugin_template.d
+*.iml

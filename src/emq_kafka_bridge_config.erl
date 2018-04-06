@@ -1,40 +1,34 @@
+%%--------------------------------------------------------------------
+%% Copyright (c) 2013-2018 EMQ Enterprise, Inc. (http://emqtt.io)
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+%%--------------------------------------------------------------------
 -module (emq_kafka_bridge_config).
 
--include_lib("emq_kafka_bridge.hrl").
+-define(APP, emq_kafka_bridge).
 
 -export ([register/0, unregister/0]).
-
 
 %%--------------------------------------------------------------------
 %% API
 %%--------------------------------------------------------------------
 register() ->
     clique_config:load_schema([code:priv_dir(?APP)], ?APP),
-    register_formatter(),
     register_config().
 
 unregister() ->
-    unregister_formatter(),
     unregister_config(),
     clique_config:unload_schema(?APP).
-
-
-%%--------------------------------------------------------------------
-%% Get ENV Register formatter
-%%--------------------------------------------------------------------
-register_formatter() ->
-    [clique:register_formatter(cuttlefish_variable:tokenize(Key), 
-     fun formatter_callback/2) || Key <- keys()].
-
-formatter_callback([_, _, "server"], Params) ->
-    lists:concat([proplists:get_value(host, Params), ":", proplists:get_value(port, Params)]).
-
-%%--------------------------------------------------------------------
-%% UnRegister formatter
-%%--------------------------------------------------------------------
-unregister_formatter() ->
-    [clique:unregister_formatter(cuttlefish_variable:tokenize(Key)) || Key <- keys()].
-
 
 %%--------------------------------------------------------------------
 %% Set ENV Register Config
@@ -44,12 +38,8 @@ register_config() ->
     [clique:register_config(Key , fun config_callback/2) || Key <- Keys],
     clique:register_config_whitelist(Keys, ?APP).
 
-config_callback([_, _, "server"], Value0) ->
-    {Host, Port} = parse_servers(Value0),
-    {ok, Env} = application:get_env(?APP, server),
-    Env1 = lists:keyreplace(host, 1, Env, {host, Host}),
-    Env2 = lists:keyreplace(port, 1, Env1, {port, Port}),
-    application:set_env(?APP, server, Env2),
+config_callback([_, Key], Value) ->
+    application:set_env(?APP, list_to_atom(Key), Value),
     " successfully\n".
 
 %%--------------------------------------------------------------------
@@ -60,18 +50,12 @@ unregister_config() ->
     [clique:unregister_config(Key) || Key <- Keys],
     clique:unregister_config_whitelist(Keys, ?APP).
 
-
 %%--------------------------------------------------------------------
 %% Internal Functions
 %%--------------------------------------------------------------------
 keys() ->
-    ["bridge.kafka.server"].
+    ["kafka_bridge.server",  "kafka_bridge.port", "kafka_bridge.topic"].
 
-parse_servers(Value) ->
-    case string:tokens(Value, ":") of
-        [Domain]       -> {Domain, 9092};
-        [Domain, Port] -> {Domain, list_to_integer(Port)}
-    end.
 
 
 
