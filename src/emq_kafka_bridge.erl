@@ -143,7 +143,7 @@ on_message_publish(Message, _Env) ->
 % Produce to kafka, decide produce strategy here
 produce_to_kafka(Data) ->
     % Response = ekaf:produce_async_batched(<<"broker_message">>, list_to_binary(Json)),
-    Response = ekaf:produce_async(<<"broker_message">>, list_to_binary(Data)),
+    Response = ekaf:produce_async(<<"emqttd">>, list_to_binary(Data)),
     io:format("produce response ~p~n",[Response]).
 
 % Configure ekaf from environmental variables
@@ -151,7 +151,7 @@ configure_ekaf(_Env) ->
     application:load(ekaf),
     
     % Set topic
-    application:set_env(ekaf, ekaf_bootstrap_topics, <<"broker_message">>),
+    application:set_env(ekaf, ekaf_bootstrap_topics, <<"emqttd">>),
 
     {ok, BrokerConfig} = application:get_env(?APP, server),
     BrokerHost = proplists:get_value(host, BrokerConfig), 
