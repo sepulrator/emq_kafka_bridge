@@ -113,7 +113,35 @@ on_message_acked(ClientId, Username, Message, Env) ->
 
 on_client_subscribe(ClientId, Username, TopicTable, _Env) ->
     io:format("client(~s/~s) will subscribe: ~p~n", [Username, ClientId, TopicTable]),
-    {ok, TopicTable}.
+    io:format("ClientId: ~p~n", [ClientId]),
+    io:format("TopicTable: ~p~n", [TopicTable]),
+    [{Topic, [{qos, _Qos}| _Opts]}] = TopicTable,
+    io:format("Topic: ~p~n", [Topic]),
+    ClientId1 = binary_to_list(ClientId),
+    Topic1 = binary_to_list(Topic),
+
+    ClientId2 = lists:sublist(ClientId1, string:length(ClientId1) - 13),
+    io:format("ClientId2: ~p~n", [ClientId2]),
+    Pos =  string:chr(Topic1, $/),
+    io:format("Pos: ~p~n", [Pos]),
+
+    Topic2 = lists:sublist(Topic1, Pos - 1),
+    io:format("Topic2: ~p~n", [Topic2]),
+
+    io:format("ClientId2: ~p~n", [ClientId2]),
+    io:format("Topic2: ~p~n", [Topic2]),
+
+    %Allowed = false,
+    case ClientId2 =:= Topic2 of
+        true ->
+            io:format("!!!!!!!!Allowed: ~p~n", [Topic1]),
+            {ok, TopicTable};
+        _ ->
+%%            throw ({forbidden, <<"not allowed">>})
+            io:format("~~~~~~~~~~~NOT Allowed: ~p~n", [Topic1]),
+
+            {stop, TopicTable}
+    end.
     
 on_client_unsubscribe(ClientId, Username, TopicTable, _Env) ->
     io:format("client(~s/~s) unsubscribe ~p~n", [ClientId, Username, TopicTable]),
